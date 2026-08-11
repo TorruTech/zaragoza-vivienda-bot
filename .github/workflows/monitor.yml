@@ -1,0 +1,85 @@
+name: Monitor vivienda Zaragoza
+
+on:
+  schedule:
+    # Cada hora en el minuto 17 (UTC). Evita el minuto 0, que suele tener más carga.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_discord:
+        description: "Enviar solo un mensaje de prueba a Discord"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: zaragoza-vivienda-monitor
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Probar Discord
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_discord == true }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python monitor.py --test-discord
+
+      - name: Ejecutar monitor
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_discord == true) }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python monitor.py
+
+      - name: Guardar estado si ha cambiado
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_discord == true) }}
+        run: |
+          git config user.name "zaragoza-vivienda-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: actualizar estado del monitor"
+            git push
+          fi
+
+      - name: Mantener activo el workflow público
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.test_discord == true) }}
+        shell: bash
+        run: |
+          # GitHub puede desactivar workflows programados de repos públicos
+          # tras 60 días sin actividad. Creamos un heartbeat como máximo cada 30 días.
+          NOW=$(date -u +%s)
+          FILE=".github/monitor-heartbeat"
+          LAST=0
+          if [ -f "$FILE" ]; then
+            LAST=$(cat "$FILE" 2>/dev/null || echo 0)
+          fi
+          AGE=$((NOW - LAST))
+          if [ "$AGE" -ge 2592000 ]; then
+            echo "$NOW" > "$FILE"
+            git add "$FILE"
+            git config user.name "zaragoza-vivienda-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore: heartbeat del monitor"
+            git push
+          else
+            echo "Heartbeat todavía reciente."
+          fi
