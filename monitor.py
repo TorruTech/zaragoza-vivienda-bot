@@ -18,7 +18,7 @@ SOURCES = [
     {
         "name": "Ayuntamiento — promoción Actur/Valdespartera",
         "url": "https://www.zaragoza.es/sede/servicio/noticia/341908",
-        "always_notify": True,
+        "always_notify": False,
         "parser": "zaragoza_news",
     },
     {
@@ -30,7 +30,7 @@ SOURCES = [
     {
         "name": "Alquiler Asequible Zaragoza",
         "url": "https://alquilerasequiblezaragoza.com/",
-        "always_notify": True,
+        "always_notify": False,
         "parser": "generic",
     },
     {
@@ -302,10 +302,21 @@ def main():
                 continue
 
             delta = changed_fragments(old_text, text)
+
+            # Un hash distinto sin texto nuevo útil es ruido técnico.
+            if not delta.strip():
+                print("  Cambio técnico sin texto nuevo relevante. Se ignora.")
+                previous_sources[url] = {
+                    "name": name, "hash": new_hash, "text": text,
+                    "last_seen": datetime.now(timezone.utc).isoformat(),
+                }
+                continue
+
             hits = keyword_hits(delta, KEYWORDS)
             critical_hits = keyword_hits(delta, CRITICAL_KEYWORDS)
 
-            should_notify = src.get("always_notify", False) or bool(hits) or bool(critical_hits)
+            # Solo avisamos si el TEXTO NUEVO contiene términos relevantes.
+            should_notify = bool(hits) or bool(critical_hits)
             critical = bool(critical_hits)
 
             print(f"  Cambio detectado. Keywords: {hits or 'ninguna'}")
