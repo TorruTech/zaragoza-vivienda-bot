@@ -32,7 +32,7 @@
     }
   },
   "note": "Se rellena automáticamente en la primera ejecución. No contiene secretos.",
-  "last_run_utc": "2026-08-15T20:36:20.837885+00:00",
+  "last_run_utc": "2026-08-15T21:34:05.540898+00:00",
   "last_notifications": 0,
-  "last_failures": 0
+  "last_failures": 1
 }
